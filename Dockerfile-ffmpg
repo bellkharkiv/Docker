@@ -1,0 +1,55 @@
+FROM node:9.8.0-stretch
+
+COPY . /app/
+
+WORKDIR /app/
+ENV PORT=3000
+ADD id_rsa /root/.ssh/id_rsa
+
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && sh -c 'echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
+    && apt-get update -y \
+    && apt-get install google-chrome-stable -y
+
+RUN chmod 600 /root/.ssh/id_rsa && \
+    chmod 0700 /root/.ssh && \
+    ssh-keyscan bitbucket.org > /root/.ssh/known_hosts && \
+    apt update -qqy && \
+    apt -qqy install \
+    ruby \
+    ruby-dev \
+    yarn \
+    locales \
+    autoconf automake gdb git libffi-dev zlib1g-dev libssl-dev \
+    build-essential
+
+
+RUN wget -O /tmp/ffmpeg.tar.xz https://s3.eu-central-1.amazonaws.com/***/ffmpeg-release-amd64-static.tar.xz \
+    && mkdir -p /opt/ffmpeg \
+    && tar xvf /tmp/ffmpeg.tar.xz -C /opt/ffmpeg \
+    && ln -s /opt/ffmpeg/ffmpeg /usr/bin/ffmpeg \
+    && ln -s /opt/ffmpeg/ffprobe /usr/bin/ffprobe
+RUN curl https://intoli.com/install-google-chrome.sh | bash
+RUN gem install compass
+RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+locale-gen
+ENV LC_ALL en_US.UTF-8
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+
+RUN groupadd -r chrome && useradd -r -g chrome -G audio,video chrome \
+    && mkdir -p /home/chrome && chown -R chrome:chrome /home/chrome
+
+WORKDIR /home/chrome
+COPY . /home/chrome
+
+RUN npm install && chown -R chrome:chrome /home/chrome/ && \
+    node ./node_modules/gulp/bin/gulp.js client && \
+    rm -rf /app/id_rsa \
+    rm -rf /root/.ssh/
+
+
+EXPOSE 3000
+
+CMD [ "node", "server.js" ]
+
